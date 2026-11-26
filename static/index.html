@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KB Link Checker</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #667085;
+    --border: #e1e5eb; --accent: #2563eb; --accent-text: #fff;
+    --ok: #15803d; --ok-bg: #dcfce7; --warn: #b45309; --warn-bg: #fef3c7;
+    --err: #b91c1c; --err-bg: #fee2e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218; --card: #181c25; --text: #e6e9ef; --muted: #98a1b3;
+      --border: #2a3040; --accent: #5b8def; --accent-text: #0b1020;
+      --ok: #4ade80; --ok-bg: #12301e; --warn: #fbbf24; --warn-bg: #3a2d0c;
+      --err: #f87171; --err-bg: #3b1515;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  input[type=url] { flex: 1 1 360px; padding: 10px 12px; font: inherit;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); }
+  select, button { font: inherit; padding: 10px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text);
+    border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .error { color: var(--err); margin: 10px 0 0; min-height: 1em; }
+  .hidden { display: none !important; }
+  .status-row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    background: var(--warn-bg); color: var(--warn); }
+  .pill.done { background: var(--ok-bg); color: var(--ok); }
+  .pill.bad { background: var(--err-bg); color: var(--err); }
+  .bar { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; margin: 10px 0; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .now { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .stat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .stat.ok b { color: var(--ok); } .stat.warn b { color: var(--warn); }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .toolbar input { flex: 1 1 200px; padding: 8px 10px; font: inherit; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); }
+  .tablewrap { overflow-x: auto; max-height: 520px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+  td.url { overflow-wrap: anywhere; max-width: 340px; }
+  .tag { padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .tag.valid { background: var(--ok-bg); color: var(--ok); }
+  .tag.review { background: var(--warn-bg); color: var(--warn); }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  details summary { cursor: pointer; color: var(--muted); }
+  pre#log { max-height: 260px; overflow: auto; margin: 10px 0 0; padding: 10px;
+    background: var(--bg); border-radius: 8px; font-size: 12px; white-space: pre-wrap; }
+  a { color: var(--accent); }
+  .downloads { display: flex; gap: 8px; flex-wrap: wrap; }
+  .downloads a { text-decoration: none; padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); }
+  small.hint { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>KB Link Checker</h1>
+  <p class="sub">Paste a Zoho Knowledge Base link. The tool finds the articles, extracts their links and checks each one.</p>
+
+  <section class="card">
+    <form id="form">
+      <input type="url" id="url" required placeholder="https://help.zoho.com/portal/en/kb/accounts/oneauth" autocomplete="off">
+      <select id="scope" aria-label="Scope">
+        <option value="folder">Folder / whole KB (with subfolders)</option>
+        <option value="article">Single article</option>
+      </select>
+      <button class="primary" id="start" type="submit">Start scan</button>
+      <button type="button" id="stop" class="hidden">Stop</button>
+    </form>
+    <p class="error" id="formError" role="alert"></p>
+  </section>
+
+  <section class="card hidden" id="progressCard">
+    <div class="status-row">
+      <strong id="stage">Starting…</strong>
+      <span class="pill" id="statePill">Running</span>
+    </div>
+    <div class="bar"><div id="barFill"></div></div>
+    <div class="now" id="now"></div>
+  </section>
+
+  <section class="card hidden" id="statsCard">
+    <div class="stats">
+      <div class="stat"><b id="sFolders">0</b><span>Folders</span></div>
+      <div class="stat"><b id="sArticles">0</b><span>Articles</span></div>
+      <div class="stat"><b id="sLinks">0</b><span>Links checked</span></div>
+      <div class="stat ok"><b id="sValid">0</b><span>Valid</span></div>
+      <div class="stat warn"><b id="sReview">0</b><span>Needs review</span></div>
+      <div class="stat"><b id="sFailed">0</b><span>Failed articles</span></div>
+    </div>
+  </section>
+
+  <section class="card hidden" id="resultsCard">
+    <div class="toolbar">
+      <strong>Results</strong>
+      <select id="filter" aria-label="Filter">
+        <option value="all">All</option>
+        <option value="review">Needs review</option>
+        <option value="valid">Valid</option>
+      </select>
+      <input type="search" id="search" placeholder="Search article, link text or URL">
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Status</th><th>Article</th><th>Link text</th><th>URL</th><th>Details</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty">No links yet.</div>
+    </div>
+  </section>
+
+  <section class="card hidden" id="downloadsCard">
+    <strong>Download reports</strong>
+    <div class="downloads" id="downloads" style="margin-top:8px"></div>
+  </section>
+
+  <section class="card hidden" id="logCard">
+    <details><summary>Live log</summary><pre id="log"></pre></details>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let scanId = null, source = null, rows = [];
+  let counts, foldersTotal, foldersDone;
+
+  const STAGES = { starting: "Starting browser…", discovering: "Discovering folders…",
+                   scanning: "Scanning articles…" };
+
+  function resetState() {
+    rows = []; counts = { folders: 0, articles: 0, links: 0, valid: 0, review: 0, failed: 0 };
+    foldersTotal = 0; foldersDone = 0;
+    $("rows").innerHTML = ""; $("log").textContent = ""; $("downloads").innerHTML = "";
+    $("barFill").style.width = "0"; $("now").textContent = "";
+    setPill("Running", "");
+    renderStats(); renderEmpty();
+  }
+
+  function setPill(text, cls) { const p = $("statePill"); p.textContent = text; p.className = "pill " + cls; }
+  function renderStats() {
+    $("sFolders").textContent = counts.folders; $("sArticles").textContent = counts.articles;
+    $("sLinks").textContent = counts.links; $("sValid").textContent = counts.valid;
+    $("sReview").textContent = counts.review; $("sFailed").textContent = counts.failed;
+  }
+  function renderEmpty() {
+    const visible = $("rows").children.length;
+    $("empty").classList.toggle("hidden", visible > 0);
+    $("empty").textContent = rows.length ? "No links match the filter." : "No links yet.";
+  }
+
+  function rowMatches(r) {
+    const f = $("filter").value, q = $("search").value.trim().toLowerCase();
+    if (f === "valid" && !r.valid) return false;
+    if (f === "review" && r.valid) return false;
+    return !q || r.hay.includes(q);
+  }
+
+  function addRow(e) {
+    const valid = e.type_ === "VALID";
+    const tr = document.createElement("tr");
+    const status = document.createElement("td");
+    const tag = document.createElement("span");
+    tag.className = "tag " + (valid ? "valid" : "review");
+    tag.textContent = (e.status || "") + " " + (valid ? "Valid" : "Needs review");
+    status.append(tag);
+    const art = document.createElement("td"); art.textContent = e.article || "";
+    const txt = document.createElement("td"); txt.textContent = e.text || "";
+    const url = document.createElement("td"); url.className = "url";
+    const a = document.createElement("a"); a.href = e.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.textContent = e.url; url.append(a);
+    const det = document.createElement("td");
+    det.textContent = [e.recommendation, e.error,
+      e.final_url && e.final_url !== e.url ? "→ " + e.final_url : ""].filter(Boolean).join(" · ");
+    tr.append(status, art, txt, url, det);
+    const r = { tr, valid, hay: [e.article, e.text, e.url].join(" ").toLowerCase() };
+    rows.push(r);
+    tr.classList.toggle("hidden", !rowMatches(r));
+    $("rows").append(tr);
+  }
+
+  function applyFilter() {
+    rows.forEach(r => r.tr.classList.toggle("hidden", !rowMatches(r)));
+    $("empty").classList.toggle("hidden", rows.some(r => rowMatches(r)));
+    $("empty").textContent = rows.length ? "No links match the filter." : "No links yet.";
+  }
+
+  function handle(e) {
+    switch (e.type) {
+      case "status": $("stage").textContent = STAGES[e.stage] || e.stage; break;
+      case "folders": counts.folders = e.count; foldersTotal = e.count; renderStats(); break;
+      case "folder_start":
+        foldersDone = e.index - 1; foldersTotal = e.total;
+        $("barFill").style.width = (foldersDone / foldersTotal * 100) + "%";
+        $("now").textContent = "Folder " + e.index + " of " + e.total + ": " + e.name; break;
+      case "articles_found": counts.articles = e.total_so_far; renderStats(); break;
+      case "article_start": $("now").textContent = (e.folder ? e.folder + " › " : "") + e.title; break;
+      case "article_error": counts.failed++; renderStats(); break;
+      case "log": appendLog(e.text); break;
+      case "done": finish(e.summary); break;
+    }
+  }
+
+  function appendLog(text) {
+    const log = $("log"), atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+    log.textContent += text + "\n";
+    if (atBottom) log.scrollTop = log.scrollHeight;
+  }
+
+  function finish(s) {
+    source && source.close(); source = null;
+    $("start").disabled = false; $("stop").classList.add("hidden");
+    $("barFill").style.width = "100%";
+    $("now").textContent = "";
+    const states = {
+      completed: ["Completed", "done"], completed_with_errors: ["Completed with errors", "done"],
+      cancelled: ["Stopped", "bad"], error: ["Error", "bad"],
+      limit_reached: ["Stopped at limit", "bad"] };
+    const [label, cls] = states[s.state] || [s.state, ""];
+    $("stage").textContent = s.error ? "Scan failed: " + s.error
+      : s.limit ? "Scan stopped: " + s.limit + ". Partial results below."
+      : "Scan finished";
+    setPill(label, cls);
+    counts.folders = s.folders ?? counts.folders; counts.articles = s.articles ?? counts.articles;
+    counts.links = s.links ?? counts.links; counts.valid = s.valid ?? counts.valid;
+    counts.review = s.needs_review ?? counts.review; counts.failed = (s.failed_articles || 0) + (s.failed_folders || 0);
+    renderStats();
+    if (s.report_dir) {
+      [["validation", "validation_results.csv"], ["articles", "articles.csv"], ["result", "result.txt"]]
+        .forEach(([k, name]) => {
+          const a = document.createElement("a");
+          a.href = "/api/scans/" + scanId + "/files/" + k; a.textContent = "⬇ " + name;
+          $("downloads").append(a);
+        });
+      $("downloadsCard").classList.remove("hidden");
+    }
+  }
+
+  function onMessage(msg) {
+    const e = JSON.parse(msg.data);
+    if (e.type === "link") {
+      const link = { ...e, type_: e.classification };
+      counts.links++;
+      if (link.type_ === "VALID") counts.valid++; else counts.review++;
+      renderStats(); addRow(link);
+      return;
+    }
+    handle(e);
+  }
+
+  $("form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    $("formError").textContent = "";
+    const url = $("url").value.trim();
+    $("start").disabled = true;
+    try {
+      const res = await fetch("/api/scans", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, scope: $("scope").value }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Could not start the scan");
+      scanId = data.scan_id;
+    } catch (err) {
+      $("formError").textContent = err.message; $("start").disabled = false; return;
+    }
+    resetState();
+    ["progressCard", "statsCard", "resultsCard", "logCard"].forEach(i => $(i).classList.remove("hidden"));
+    $("downloadsCard").classList.add("hidden");
+    $("stop").classList.remove("hidden"); $("stop").disabled = false;
+    source = new EventSource("/api/scans/" + scanId + "/events");
+    source.onmessage = onMessage;
+    source.onerror = () => { /* EventSource retries automatically with Last-Event-ID */ };
+  });
+
+  $("stop").addEventListener("click", async () => {
+    $("stop").disabled = true; $("stage").textContent = "Stopping after the current article…";
+    await fetch("/api/scans/" + scanId + "/stop", { method: "POST" });
+  });
+  $("filter").addEventListener("change", applyFilter);
+  $("search").addEventListener("input", applyFilter);
+  resetState();
+})();
+</script>
+</body>
+</html>
